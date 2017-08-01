@@ -54,8 +54,13 @@ public class Rectangle extends Shape {
         }
     }
 
+    /**
+     * Diese Methode gibt einen für Menschen lesbaren Namen dieser Form aus.
+     *
+     * @return Ein für Menschen lesbarer Name dieser Form
+     */
     @Override
-    public String getName() {
-        return "rectangle";
+    public String getShapeName() {
+        return "Rectangle";
     }
 }

@@ -60,8 +60,13 @@ public class RightTriangle extends Triangle {
         );
     }
 
+    /**
+     * Diese Methode gibt einen für Menschen lesbaren Namen dieser Form aus.
+     *
+     * @return Ein für Menschen lesbarer Name dieser Form
+     */
     @Override
-    public String getName() {
-        return "right-triangle";
+    public String getShapeName() {
+        return "Right Triangle";
     }
 }

@@ -7,10 +7,7 @@ import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
-import planer.shapes.Rectangle;
-import planer.shapes.RightTriangle;
 import planer.shapes.Shape;
-import planer.shapes.Square;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -27,7 +24,9 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
 import java.io.*;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  * Hauptklasse des Projekts.
@@ -55,7 +54,7 @@ public class Planer {
     /**
      * Der Zustand, in dem sich das Programm befindet
      */
-    private State state = State.RECTANGLE;
+    private State state = State.DRAW;
     /**
      * Die Koordinaten, die zu Beginn einer Aktion angeklickt wurden
      */
@@ -71,11 +70,19 @@ public class Planer {
     /**
      * Das Panel, in dem gezeichnet wird
      */
-    private GPanel p = new GPanel(setMenu());
+    private GPanel p;
     /**
      * Die Form, die im Moment gezeichnet oder bearbeitet wird
      */
     private Shape currentShape;
+    /**
+     * Die {@link java.util.Map Map}, in der alle verfügbaren Formen und ihre Namen gespeichert werden
+     */
+    private HashMap<String, Class> shapeClasses = new HashMap<>();
+    /**
+     * Der Name der aktuellen Form
+     */
+    private String currentShapeString;
 
     /**
      * Der Konstruktor der Hauptklasse.
@@ -84,6 +91,9 @@ public class Planer {
      * Zuständen des Programms unterschieden.</p>
      */
     private Planer() {
+        loadShapeClasses();
+        p = new GPanel(setMenu());
+        currentShapeString = shapeClasses.keySet().toArray(new String[0])[0];
         p.addMouseListener(new MouseAdapter() {
             /**
              * In dieser Methode wird das Klicken der Maus behandelt.
@@ -117,19 +127,10 @@ public class Planer {
                             }
                         }
                         break;
-                    case SQUARE:
-                        currentShape = new Square(x0, y0, x1, y1);
+                    case DRAW:
+                        currentShape = getNewShapeInstance(currentShapeString, x0, y0, x1, y1);
                         shapesList.add(currentShape);
                         break;
-                    case RECTANGLE:
-                        currentShape = new planer.shapes.Rectangle(x0, y0, x1, y1);
-                        shapesList.add(currentShape);
-                        break;
-                    case RIGHT_TRIANGLE:
-                        currentShape = new RightTriangle(x0, y0, x1, y1);
-                        shapesList.add(currentShape);
-                        break;
-                    // An dieser Stelle müssen neue Formen eingetragen werden
                 }
             }
 
@@ -157,10 +158,8 @@ public class Planer {
                         case DRAG:
                             currentShape.move(x1 - x0, y1 - y0, false);
                             break;
-                        case RIGHT_TRIANGLE:
-                        case SQUARE:    // Durchfallen ist beabsichtigt, da Verhalten gleich ist.
-                        case RECTANGLE: // An dieser Stelle müssen neue Formen eingetragen werden
                         case RESIZE:
+                        case DRAW:
                             currentShape.setTmpCoords();
                             break;
                     }
@@ -212,9 +211,7 @@ public class Planer {
                     y1 = p.toWindowY(e.getY());
                     p.setColor(Color.red);
                     switch (state) {
-                        case RIGHT_TRIANGLE:
-                        case SQUARE:    // Durchfallen ist beabsichtigt, da Verhalten gleich ist.
-                        case RECTANGLE: // An dieser Stelle müssen neue Formen eingetragen werden
+                        case DRAW:
                             currentShape.setCoords(x0, y0, x1, y1, false);      // Koordinaten werden fest gesetzt, da kein Nutzen durch temporäre Setzung entsteht.
                             break;
                         case DRAG:
@@ -260,6 +257,81 @@ public class Planer {
     }
 
     /**
+     * Diese Methode generiert eine neue Form, entsprechend des Parameters shape, der den Namen einer Form übergibt. Die Form wird
+     * mit den übergebenen Koordinaten initialisiert.
+     *
+     * @param shape Der Name der Form, von der eine neue Instanz erzeugt werden soll
+     * @param x0    Die x0-Koordinate, die gesetzt werden soll
+     * @param y0    Die y0-Koordinate, die gesetzt werden soll
+     * @param x1    Die x1-Koordinate, die gesetzt werden soll
+     * @param y1    Die y1-Koordinate, die gesetzt werden soll
+     * @return Eine neue Instanz der Form, deren Name übergeben wurde
+     */
+    private Shape getNewShapeInstance(String shape, double x0, double y0, double x1, double y1) {
+        Shape s = null;
+        try {
+            s = (Shape) shapeClasses.get(shape).getConstructor(double.class, double.class, double.class, double.class).newInstance(x0, y0, x1, y1);
+        } catch (InstantiationException e1) {
+            JOptionPane.showMessageDialog(p.getPane(), "The class of this shape could not be instantiated.", "Instantiation Error", JOptionPane.ERROR_MESSAGE);
+        } catch (IllegalAccessException e1) {
+            JOptionPane.showMessageDialog(p.getPane(), "The class of this shape can not be accessed.", "Illegal Access", JOptionPane.ERROR_MESSAGE);
+        } catch (NoSuchMethodException e1) {
+            JOptionPane.showMessageDialog(p.getPane(), "The class of this shape does not follow the rules for classes of shapes.", "Lack of Constructor", JOptionPane.ERROR_MESSAGE);
+        } catch (InvocationTargetException e1) {
+            JOptionPane.showMessageDialog(p.getPane(), "The class of the shape triggered an error.", "Class Error", JOptionPane.ERROR_MESSAGE);
+        }
+        return s;
+    }
+
+    /**
+     * Diese Methode liest aus der Datei, die auf dem Pfad {@link Planer#SHAPE_CLASSES_PATH} liegt, alle verfügbaren Form-Klassen
+     * aus und schreibt diese Klassen in {@link Planer#shapeClasses}.
+     */
+    private void loadShapeClasses() {
+        InputStream ist = getClass().getResourceAsStream(SHAPE_CLASSES_PATH);
+        Reader r;
+        try {
+            r = new InputStreamReader(ist, "UTF-8");
+        } catch (UnsupportedEncodingException ignored) {
+            return;
+        }
+        InputSource iso;
+        iso = new InputSource(r);
+        iso.setEncoding("UTF-8");
+
+        SAXParser saxp;
+        try {
+            saxp = SAXParserFactory.newInstance().newSAXParser();
+        } catch (ParserConfigurationException | SAXException e) {
+            JOptionPane.showMessageDialog(p.getPane(), "The file containing the usable shapes could not be parsed", "Parser Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        DefaultHandler dh = new DefaultHandler() {
+            ShapeClassLoader scl = new ShapeClassLoader();
+            Class c;
+
+            @Override
+            public void startElement(String uri, String localName, String qName, Attributes attributes) throws SAXException {
+                if (qName.equalsIgnoreCase("shape") || qName.equalsIgnoreCase("abstractShape")) {
+                    try {
+                        c = scl.loadClass(attributes.getValue("name"));
+                    } catch (ClassNotFoundException e) {
+                        JOptionPane.showMessageDialog(p.getPane(), "One of the shape classes could not be found.", "Shape Class not Found", JOptionPane.ERROR_MESSAGE);
+                    }
+                    shapeClasses.put(attributes.getValue("name"), c);
+                }
+            }
+        };
+        try {
+            saxp.parse(iso, dh);
+        } catch (SAXException e) {
+            JOptionPane.showMessageDialog(p.getPane(), "An error ocurred during parsing the file containing the usable shapes.", "Parsing Error", JOptionPane.ERROR_MESSAGE);
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(p.getPane(), "The file containing the usable shapes could not be loaded.", "IO Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
      * Diese Methode zeichnet alle Formen neu, um zu verindern, dass durch den XOR-Zeichenmodus Teile nicht
      * betroffener Formen gelöscht werden.
      */
@@ -279,6 +351,8 @@ public class Planer {
      * In dieser Methode wird ein Menü für das Zeichenfenster erzeugt.
      * <p>Als {@link Action} der Menüpunkte wird jeweils eine anonyme Klasse verwendet, um die dem Menüpubkt entsprechende Aktion
      * durchzuführen.</p>
+     * <p>Der Menüpunkt {@code Shapes} wird automatisch aus der Datei, in der alle verfügbaren Formen und ihre Klassen aufgelistet
+     * sind, mit allen verfügbaren Formen gefüllt.</p>
      *
      * @return Die Menüleiste, die von {@link Planer#p} verwendet wird.
      */
@@ -303,27 +377,7 @@ public class Planer {
             }
         }));
 
-        JMenu shapesMenu = new JMenu("Shapes");
-        shapesMenu.add(new JMenuItem(new AbstractAction("Rectangle") {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                state = State.RECTANGLE;
-            }
-        }));
-        shapesMenu.add(new JMenuItem(new AbstractAction("Square") {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                state = State.SQUARE;
-            }
-        }));
-        JMenu trianglesMenu = new JMenu("Triangles");
-        trianglesMenu.add(new JMenuItem(new AbstractAction("Right Triangle") {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                state = State.RIGHT_TRIANGLE;
-            }
-        }));
-        shapesMenu.add(trianglesMenu);
+        final JMenu shapesMenu = new JMenu("Shapes");
 
         JMenu editMenu = new JMenu("Edit");
         editMenu.add(new JMenuItem(new AbstractAction("Delete") {
@@ -368,6 +422,70 @@ public class Planer {
             }
         }));
 
+        InputStream ist = getClass().getResourceAsStream(SHAPE_CLASSES_PATH);
+        Reader r;
+        try {
+            r = new InputStreamReader(ist, "UTF-8");
+        } catch (UnsupportedEncodingException ignored) {
+            return null;
+        }
+        InputSource iso;
+        iso = new InputSource(r);
+        iso.setEncoding("UTF-8");
+
+        SAXParser saxp;
+        try {
+            saxp = SAXParserFactory.newInstance().newSAXParser();
+        } catch (ParserConfigurationException | SAXException e) {
+            JOptionPane.showMessageDialog(p.getPane(), "The file containing the usable shapes could not be parsed", "Parser Error", JOptionPane.ERROR_MESSAGE);
+            return null;
+        }
+        DefaultHandler dh = new DefaultHandler() {
+            JMenu parent = null;
+            JMenu current = shapesMenu;
+
+            @Override
+            public void startElement(String uri, String localName, String qName, final Attributes attributes) throws SAXException {
+                if (qName.equalsIgnoreCase("shape")) {
+                    String screenName = null;
+                    final String shapeString;
+                    Class<Shape> shape = shapeClasses.get(attributes.getValue("name"));
+                    try {
+                        screenName = (String) shape.getMethod("getShapeName").invoke(shape.getConstructor(double.class, double.class, double.class, double.class).newInstance(0.0, 0.0, 0.0, 0.0));
+                    } catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+                        JOptionPane.showMessageDialog(null, "The class " + shape.getCanonicalName() + " does not conform to the rules for shape classes", "Misformed Shape Class", JOptionPane.ERROR_MESSAGE);
+                    }
+                    shapeString = attributes.getValue("name");
+                    current.add(new JMenuItem(new AbstractAction(screenName) {
+                        @Override
+                        public void actionPerformed(ActionEvent e) {
+                            state = State.DRAW;
+                            currentShapeString = shapeString;
+                        }
+                    }));
+                } else if (qName.equalsIgnoreCase("abstractShape")) {
+                    JMenu abstractShapeMenu = new JMenu(attributes.getValue("name"));
+                    current.add(abstractShapeMenu);
+                    parent = current;
+                    current = abstractShapeMenu;
+                }
+            }
+
+            @Override
+            public void endElement(String uri, String localName, String qName) throws SAXException {
+                if (qName.equalsIgnoreCase("abstractShape")) {
+                    current = parent;
+                }
+            }
+        };
+        try {
+            saxp.parse(iso, dh);
+        } catch (SAXException e) {
+            JOptionPane.showMessageDialog(p.getPane(), "An error ocurred during parsing the file containing the usable shapes.", "Parsing Error", JOptionPane.ERROR_MESSAGE);
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(p.getPane(), "The file containing the usable shapes could not be loaded.", "IO Error", JOptionPane.ERROR_MESSAGE);
+        }
+
         JMenuBar menuBar = new JMenuBar();
         menuBar.add(fileMenu);
         menuBar.add(shapesMenu);
@@ -402,7 +520,7 @@ public class Planer {
             Element e = d.createElement("shape");
             rE.appendChild(e);
             double[] coords = s.getCoords();
-            e.setAttribute("type", s.getName());
+            e.setAttribute("type", s.getClassName());
             e.setAttribute("x0", String.valueOf(coords[0]));
             e.setAttribute("y0", String.valueOf(coords[1]));
             e.setAttribute("x1", String.valueOf(coords[2]));
@@ -464,13 +582,16 @@ public class Planer {
             @Override
             public void startElement(String uri, String localName, String qName, Attributes attributes) throws SAXException {
                 if (qName.equalsIgnoreCase("shape")) {
-                    if (attributes.getValue("type").equalsIgnoreCase("rectangle")) {
-                        s = new Rectangle(Double.parseDouble(attributes.getValue("x0")), Double.parseDouble(attributes.getValue("y0")), Double.parseDouble(attributes.getValue("x1")), Double.parseDouble(attributes.getValue("y1")));
-                    } else if (attributes.getValue("type").equalsIgnoreCase("square")) {
-                        s = new Square(Double.parseDouble(attributes.getValue("x0")), Double.parseDouble(attributes.getValue("y0")), Double.parseDouble(attributes.getValue("x1")), Double.parseDouble(attributes.getValue("y1")));
-                    } else if (attributes.getValue("type").equalsIgnoreCase("right-triangle")) {
-                        s = new RightTriangle(Double.parseDouble(attributes.getValue("x0")), Double.parseDouble(attributes.getValue("y0")), Double.parseDouble(attributes.getValue("x1")), Double.parseDouble(attributes.getValue("y1")));
+                    if (shapeClasses.containsKey(attributes.getValue("type"))) {
+                        s = getNewShapeInstance(attributes.getValue("type"), Double.parseDouble(attributes.getValue("x0")), Double.parseDouble(attributes.getValue("y0")), Double.parseDouble(attributes.getValue("x1")), Double.parseDouble(attributes.getValue("y1")));
                     }
+//                    if (attributes.getValue("type").equalsIgnoreCase("rectangle")) {
+//                        s = new Rectangle(Double.parseDouble(attributes.getValue("x0")), Double.parseDouble(attributes.getValue("y0")), Double.parseDouble(attributes.getValue("x1")), Double.parseDouble(attributes.getValue("y1")));
+//                    } else if (attributes.getValue("type").equalsIgnoreCase("square")) {
+//                        s = new Square(Double.parseDouble(attributes.getValue("x0")), Double.parseDouble(attributes.getValue("y0")), Double.parseDouble(attributes.getValue("x1")), Double.parseDouble(attributes.getValue("y1")));
+//                    } else if (attributes.getValue("type").equalsIgnoreCase("right-triangle")) {
+//                        s = new RightTriangle(Double.parseDouble(attributes.getValue("x0")), Double.parseDouble(attributes.getValue("y0")), Double.parseDouble(attributes.getValue("x1")), Double.parseDouble(attributes.getValue("y1")));
+//                    }
                 }
             }
 
@@ -517,6 +638,53 @@ public class Planer {
      * Eine Auflistung aller möglichen Zustände dieser Klasse.
      */
     private enum State {
-        DRAG, RECTANGLE, SQUARE, RIGHT_TRIANGLE, RESIZE, DELETE // An dieser Stelle müssen neue Formen eingetragen werden.
+        DRAG, RECTANGLE, SQUARE, RIGHT_TRIANGLE, RESIZE, DRAW, DELETE // An dieser Stelle müssen neue Formen eingetragen werden.
+    }
+
+
+    /**
+     * Ein {@link ClassLoader}, der nur Klassen aus dem {@code shapes}-Package lädt.
+     */
+    private final class ShapeClassLoader extends ClassLoader {
+        /**
+         * Diese Methode lädt nur Klassen, die im {@code shapes}-Package liegen.
+         *
+         * @param name Der Name, der Klasse, die geladen werden soll
+         * @return Die Klasse, die geladen werden sollte, falls sie gefunden wurde
+         * @throws ClassNotFoundException falls die Klasse nicht gefunden werden konnte
+         */
+        @Override
+        protected Class<?> findClass(String name) throws ClassNotFoundException {
+            name = "planer.shapes." + name;
+            String file = name.replace('.', File.separatorChar) + ".class";
+            byte[] b;
+            try {
+                b = loadClassFileData(file);
+                Class c = defineClass(name, b, 0, b.length);
+                resolveClass(c);
+                return c;
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(p.getPane(), name + "could not be loaded. Please provide the correct file or remove this class from shapes.xml", "File not found", JOptionPane.ERROR_MESSAGE);
+            }
+            throw new ClassNotFoundException();
+        }
+
+        /**
+         * Diese Methode lädt die Binärdaten aus einer {@code .class}-Datei
+         *
+         * @param name Die Datei, die geladen werden soll
+         * @return Die Binärdaten der Datei
+         * @throws IOException falls die Datei nicht gelesen werden konnte
+         */
+        private byte[] loadClassFileData(String name) throws IOException {
+            InputStream stream = getClass().getClassLoader().getResourceAsStream(
+                    name);
+            int size = stream.available();
+            byte buff[] = new byte[size];
+            DataInputStream in = new DataInputStream(stream);
+            in.readFully(buff);
+            in.close();
+            return buff;
+        }
     }
 }

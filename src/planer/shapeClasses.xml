@@ -1,0 +1,7 @@
+<shapes>
+    <shape name="Rectangle"/>
+    <shape name="Square"/>
+    <abstractShape name="Triangle">
+        <shape name="RightTriangle"/>
+    </abstractShape>
+</shapes>

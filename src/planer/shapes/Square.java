@@ -17,9 +17,14 @@ public class Square extends Rectangle {
         super(x0, y0, x1, y1);
     }
 
+    /**
+     * Diese Methode gibt einen für Menschen lesbaren Namen dieser Form aus.
+     *
+     * @return Ein für Menschen lesbarer Name dieser Form
+     */
     @Override
-    public String getName() {
-        return "square";
+    public String getShapeName() {
+        return "Square";
     }
 
     /**

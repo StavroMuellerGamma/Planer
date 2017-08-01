@@ -157,5 +157,21 @@ public abstract class Shape {
         y1 = tmpy1;
     }
 
-    public abstract String getName();
+    /**
+     * Diese Methode liefert den Klassennamen, so wie im Quellcode verwendet wird.
+     *
+     * @return Der Name der implementirenden Klasse im Quellcode
+     */
+    public String getClassName() {
+        String na = this.getClass().getName();
+        String[] n = na.split("\\.");
+        return n[2];
+    }
+
+    /**
+     * Diese Methode liefert den Namen der Form, die sich mit der implementierenden Klasse zeichnen lässt.
+     *
+     * @return Der Name der Form, die sich mit der implementirenden Klasse zeichnen lässt
+     */
+    public abstract String getShapeName();
 }
