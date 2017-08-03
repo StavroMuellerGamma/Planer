@@ -4,4 +4,5 @@
     <abstractShape name="Triangle">
         <shape name="RightTriangle"/>
     </abstractShape>
+    <shape name="Circle"/>
 </shapes>
